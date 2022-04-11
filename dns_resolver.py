@@ -14,53 +14,75 @@ class DNSResolver:
 
     return str(domain_name_in_query), client_addr, dom_id
 
+  def __cache_lookup(cache: Cache, domain_list: list[str]) -> tuple[bool, tuple[str, str], list[str]]:
+    longest_domain_in_cache = ''
+    corresponding_ip = ''
+    for domain in domain_list:
+      is_in_cache, ip = cache.search_cache(domain)
+      if is_in_cache:
+        longest_domain_in_cache = domain
+        corresponding_ip = ip
+      
+    if longest_domain_in_cache != '':
+      index = domain_list.index(longest_domain_in_cache) + 1
+
+      return True, (longest_domain_in_cache, corresponding_ip), domain_list[index:]
+    
+    return False, ('', ''), domain_list
+  
+  def __search_ip_of_domain(cache: Cache, domain: str, addr: str) -> str:
+    root_addr = '8.8.8.8'
+
+    is_in_cache, ip = cache.search_cache(domain)
+    if is_in_cache:
+      print('Responde cache! ')
+      return ip
+
+    d1 = send_dns_message(domain, addr)
+    d2 = DNSReply(d1)
+
+    if d2.responds_with_ip:
+      cache.update_cache((domain, d2.data))
+      return d2.data
+    
+    ns_addr: str
+    ns_is_in_cache, ns_ip = cache.search_cache(d2.data)
+    if ns_is_in_cache:
+      ns_addr = ns_ip
+    
+    else:
+      d3 = send_dns_message(d2.data, root_addr)
+      d4 = DNSReply(d3)
+      ns_addr = d4.data
+      cache.update_cache((d2.data, ns_addr))
+    
+    return ns_addr
+
+
   @classmethod
   def run(cls) -> None:
 
+    cache = Cache()
+
     dgram_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     dgram_socket.bind(('127.0.0.1', 5354))  # CAMBIAR PUERTO A 5353 ANTES DE ENTREGAR
-    root_addr = '8.8.8.8'
 
     while True:
 
       domain_name, client_addr, dom_id = cls.__recv_domain_name_dns_msg(dgram_socket)
       links_in_request = parse_domain(domain_name)
 
-      i = 0
-      addr = root_addr
-      curr_link = links_in_request[i]
-      while i < len(links_in_request) - 1:
-
-        d = send_dns_message(curr_link, addr)
-        d = DNSReply(d)
-
-        if d.responds_with_ip:
-          i += 1
-          curr_link = links_in_request[i]
-          addr = d.data
-        
-        else:
-          curr_link = d.data
-          addr = root_addr
-      
-      d = send_dns_message(curr_link, addr)
-      d = DNSReply(d)
-      
-      if not d.responds_with_ip:
-
-        d = send_dns_message(d.data, root_addr)
-        d = DNSReply(d)
-
-      domain_ip = d.data
+      addr = '8.8.8.8'
+      for domain in links_in_request:
+        addr = cls.__search_ip_of_domain(cache, domain, addr)
 
       resp = DNSRecord(DNSHeader(id=dom_id, qr=1,aa=1,ra=1),
                        q=DNSQuestion(domain_name),
-                       a=RR(domain_name,rdata=A(domain_ip)))
+                       a=RR(domain_name,rdata=A(addr)))
 
       dgram_socket.sendto(bytes(resp.pack()), client_addr)
 
-      print(domain_name, 'corresponde a la IP: ', domain_ip)
-
+      print(domain_name, 'corresponde a la IP: ', addr)
 
 
 if __name__ == "__main__":

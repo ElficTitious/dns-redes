@@ -42,6 +42,40 @@ def parse_domain(url: str) -> list[str]:
   return sub_addresses
 
 
+class Cache:
+
+  def __init__(self):
+    self.cache = []
+    self.__stack = []
+
+  def __push_in_stack(self, domain_ip_pair: tuple[str, str]) -> None:
+    self.__stack.append(domain_ip_pair)
+    if len(self.__stack) > 100:
+      self.__stack.pop(0)
+
+  def __generate_cache(self) -> None:
+    l = []
+    stack_no_dups = list(dict.fromkeys(self.__stack))
+    for domain_ip_pair in stack_no_dups:
+      l.append((domain_ip_pair, self.__stack.count(domain_ip_pair)))
+    l.sort(key=lambda x: x[1], reverse=True)
+    l = [x[0] for x in l]
+    self.cache = l[:10]
+
+  def update_cache(self, domain_ip_pair: tuple[str, str]) -> None:
+    self.__push_in_stack(domain_ip_pair)
+    self.__generate_cache()
+
+  def search_cache(self, domain: str) -> tuple[bool, str]: 
+    for i in range(len(self.cache)):
+      if domain == self.cache[i][0]:
+        self.__push_in_stack((domain, self.cache[i][1]))
+        self.__generate_cache()
+        return True, self.cache[i][1]
+    
+    return False, ''
+
+
 class DNSReply:
 
   data: str
