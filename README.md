@@ -5,6 +5,7 @@ Semana 4 y 5 del Curso de Redes CC4303 FCFM
 ## Ejecución del DNS Resolver
 
 ```bash
+pip install requirements.txt
 python3 dns_resolver.py
 ```
 
