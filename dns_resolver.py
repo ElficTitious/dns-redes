@@ -88,7 +88,7 @@ class DNSResolver:
 
     # Instanciamos el socket a usar y asociamos a (localhost, 5353)
     dgram_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    dgram_socket.bind(('127.0.0.1', 5354))  # CAMBIAR PUERTO A 5353 ANTES DE ENTREGAR
+    dgram_socket.bind(('127.0.0.1', 5353))
 
     while True:
       
