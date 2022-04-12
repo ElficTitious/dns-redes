@@ -13,22 +13,6 @@ class DNSResolver:
     domain_name_in_query = first_query.get_qname() # nombre de dominio por el cual preguntamos
 
     return str(domain_name_in_query), client_addr, dom_id
-
-  def __cache_lookup(cache: Cache, domain_list: list[str]) -> tuple[bool, tuple[str, str], list[str]]:
-    longest_domain_in_cache = ''
-    corresponding_ip = ''
-    for domain in domain_list:
-      is_in_cache, ip = cache.search_cache(domain)
-      if is_in_cache:
-        longest_domain_in_cache = domain
-        corresponding_ip = ip
-      
-    if longest_domain_in_cache != '':
-      index = domain_list.index(longest_domain_in_cache) + 1
-
-      return True, (longest_domain_in_cache, corresponding_ip), domain_list[index:]
-    
-    return False, ('', ''), domain_list
   
   def __search_ip_of_domain(cache: Cache, domain: str, addr: str) -> str:
     root_addr = '8.8.8.8'

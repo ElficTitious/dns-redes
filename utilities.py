@@ -6,6 +6,20 @@ import dnslib
 from dnslib.dns import CLASS, QTYPE
 
 def send_dns_message(query_name: str, address: str) -> DNSRecord:
+  """Función usada para enviar mensaje DNS preguntando por el dominio query_name
+  a la dirección address, donde se retorna el DNSRecord resultante.
+
+  Parameters:
+  -----------
+
+  query_name (str): Dominio por el cual se está consultando.
+  address (str): Dirección a la cual se consulta por el dominio.
+
+  Returns:
+  --------
+
+  (DNSRecord): Mensaje DNS resultante de la consulta.
+  """
   # Acá ya no tenemos que crear el encabezado porque dnslib lo hace por nosotros, por default pregunta por el tipo A
   qname = query_name
   q = DNSRecord.question(qname)
@@ -24,11 +38,30 @@ def send_dns_message(query_name: str, address: str) -> DNSRecord:
   return d
 
 def parse_domain(url: str) -> list[str]:
+  """Función que parsea un dominio retornando una lista con todos los
+  subdominios necesarios para resolver la ip correspondiente al dominio.
+  
+  Ejemplo:
+  --------
+
+  parse_domain("eol.uchile.cl.") = [".", "cl.", "uchile.cl.", "eol.uchile.cl."]
+
+  Parameters:
+  -----------
+
+  url (str): Dominio a partir del cual generar la lista de subdominios.
+
+  Returns:
+  --------
+
+  (list[str]): Lista de subdominios necesarios para resolver la ip del dominio url.
+  """
   substring = ['.']
-  sub_addresses = ['.']
+  sub_addresses = ['.'] # Inicilizamos la lista con la raiz "."
   for i in range(len(url) - 2, -1, -1):
     curr_char = url[i]
     if url[i] == '.':
+      # Al llegar a u '.' añadimos el substring generado
       substring = ''.join(substring)
       sub_addresses.append(substring)
       substring = substring.split()
@@ -43,40 +76,106 @@ def parse_domain(url: str) -> list[str]:
 
 
 class Cache:
+  """Clase usada para representar un cache, el cual es utilizado por un
+  DNSResolver para guardar el ip correspondiente a los 10 dominios mas
+  consultados entre las últimas 100 consultas.
+
+  Attributes:
+  -----------
+
+  cache (list[tuple[str, str]]): Lista de pares (dominio, ip) --ip puede ser
+                                 también un name server--.
+  """
 
   def __init__(self):
     self.cache = []
+    # Campo privado donde guardar los 100 últimos pares (dominio, ip) consultados.
     self.__stack = []
 
   def __push_in_stack(self, domain_ip_pair: tuple[str, str]) -> None:
+    """Método privado usado para guardar una consulta en el stack.
+
+    Parameters:
+    -----------
+
+    domain_ip_pair (tuple[str, str]): Par (dominio, ip) a guardar en el stack.
+    """
     self.__stack.append(domain_ip_pair)
+    # Si luego de pushear el par en el stack el largo supera 100, quitamos el ultimo
+    # elemento.
     if len(self.__stack) > 100:
       self.__stack.pop(0)
 
   def __generate_cache(self) -> None:
+    """Método usado para generar el cache a partir del stack de últimas 100
+    consultas.
+    """
     l = []
+    # En primer lugar generamos una lista auxiliar sin duplicados a partir
+    # del stack.
     stack_no_dups = list(dict.fromkeys(self.__stack))
+    # Para cada elemento en la lista auxiliar guardamos en l un par correspondiente
+    # al elemento y sus ocurrencias en el stack.
     for domain_ip_pair in stack_no_dups:
       l.append((domain_ip_pair, self.__stack.count(domain_ip_pair)))
+    # Ordenamos la lista en base a las ocurrencias (en orden reverso).
     l.sort(key=lambda x: x[1], reverse=True)
+    # Nos quedamos con solo los pares (dominio, ip) y asignamos los primeros 10
+    # elementos al cache.
     l = [x[0] for x in l]
     self.cache = l[:10]
 
   def update_cache(self, domain_ip_pair: tuple[str, str]) -> None:
+    """Método usado para actualizar el caché con un nuevo par (dominio, ip).
+    Solo se usará en casó de registar un par actualmento no almacenado en el
+    caché.
+
+    Parameters:
+    -----------
+
+    domain_ip_pair (tuple[str, str]): Par (dominio, ip) a guardar en el caché.
+    """
+    # En primer lugar pusheamos el par en el stack.
     self.__push_in_stack(domain_ip_pair)
+    # Luego genearmos el caché
     self.__generate_cache()
 
-  def search_cache(self, domain: str) -> tuple[bool, str]: 
+  def search_cache(self, domain: str) -> tuple[bool, str]:
+    """Método usado para buscar un dominio en el caché, donde en caso de estár en
+    el caché se actualiza el stack y caché para reflejar la nueva consulta.
+
+    Parameters:
+    -----------
+
+    domain (str): Dominio a buscar en el caché.
+
+    Returns:
+    --------
+
+    (tuple[bool, str]): Par representando si el dominio se encuentra en cache junto
+                        con la ip. En caso de no estar en el caché como segundo elemento
+                        se retorna el string vacio.
+    """
     for i in range(len(self.cache)):
       if domain == self.cache[i][0]:
-        self.__push_in_stack((domain, self.cache[i][1]))
-        self.__generate_cache()
+        # Si el elemento está en el cache se actualiza el stack y se genera nuevamente
+        # el caché.
+        self.update_cache((domain, self.cache[i][1]))
         return True, self.cache[i][1]
     
     return False, ''
 
 
 class DNSReply:
+  """Clase auxiliar usada para representar una respuesta DNS.
+
+  Attributes:
+  -----------
+
+  data (str): Respuesta asociada a una consulta DNS (puede ser IP, SOA o NS).
+  responds_with_ip (bool): Booleano usado para representar si la respuesta es
+                           o no una IP. 
+  """
 
   data: str
 
